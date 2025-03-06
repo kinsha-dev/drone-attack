@@ -58,6 +58,7 @@ let joystickDeltaX = 0;
 let joystickDeltaY = 0;
 let lastFire = 0;
 const fireRate = 0.2;
+const touchSensitivity = 0.005; // Increased for fluidity (was 0.002)
 
 // Difficulty settings
 const difficultySettings = {
@@ -371,8 +372,7 @@ if (!isTouchDevice) {
             const sensitivity = 0.002;
             camera.rotation.y -= event.movementX * sensitivity;
             camera.rotation.x -= event.movementY * sensitivity;
-            camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -Math.PI / 4, Math.PI / 4);
-            camera.rotation.y = THREE.MathUtils.clamp(camera.rotation.y, -Math.PI / 3, Math.PI / 3);
+            // No clamping for mouse, allowing full 360-degree rotation
         }
     });
 
@@ -514,11 +514,10 @@ function animate() {
 
     // Touch-based aiming (only on touch devices)
     if (isTouchDevice && joystickTouchId !== null) {
-        const sensitivity = 0.002;
-        camera.rotation.y -= joystickDeltaX * sensitivity;
-        camera.rotation.x -= joystickDeltaY * sensitivity;
-        camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -Math.PI / 4, Math.PI / 4);
-        camera.rotation.y = THREE.MathUtils.clamp(camera.rotation.y, -Math.PI / 3, Math.PI / 3);
+        const deltaTime = 1 / 60; // Assume ~60 FPS for smoothness
+        camera.rotation.y -= joystickDeltaX * touchSensitivity * deltaTime;
+        camera.rotation.x -= joystickDeltaY * touchSensitivity * deltaTime;
+        // No clamping for full 360-degree rotation
     }
 
     let dronesNearStation = false;
