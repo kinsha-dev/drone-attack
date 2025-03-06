@@ -1,0 +1,4 @@
+Difficulty: Easy
+Drones Remaining: 0
+Score: 0
+Easy Medium Hard
