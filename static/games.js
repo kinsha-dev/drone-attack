@@ -5,6 +5,12 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// Ensure renderer canvas is visible
+renderer.domElement.style.position = 'absolute';
+renderer.domElement.style.top = '0';
+renderer.domElement.style.left = '0';
+renderer.domElement.style.zIndex = '0';
+
 // Game state
 let score = 0;
 let gameStarted = false;
@@ -13,6 +19,7 @@ let droneSpeed = 0.1;
 let spawnFrequency = 2000;
 let maxDrones = 10;
 let lastSpawn = 0;
+let stationHealth = 100; // Added health for the nuclear station
 
 // Difficulty settings
 const difficultySettings = {
@@ -26,15 +33,19 @@ let synth;
 let droneSound;
 
 async function initializeAudio() {
-    await Tone.start();
-    synth = new Tone.Synth().toDestination();
-    droneSound = new Tone.Synth({
-        oscillator: { type: "sawtooth" },
-        envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.8 }
-    }).toDestination();
+    try {
+        await Tone.start();
+        synth = new Tone.Synth().toDestination();
+        droneSound = new Tone.Synth({
+            oscillator: { type: "sawtooth" },
+            envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.8 }
+        }).toDestination();
 
-    // Start drone sounds
-    setInterval(playDroneSound, 2000);
+        // Start drone sounds
+        setInterval(playDroneSound, 2000);
+    } catch (e) {
+        console.error("Audio initialization failed:", e);
+    }
 }
 
 function playDroneSound() {
@@ -49,10 +60,10 @@ function playExplosionSound() {
     }
 }
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0x404040);
+// Lighting (increased intensity for better visibility)
+const ambientLight = new THREE.AmbientLight(0x404040, 1.5); // Increased intensity
 scene.add(ambientLight);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1); // Increased intensity
 directionalLight.position.set(1, 1, 1);
 scene.add(directionalLight);
 
@@ -128,44 +139,41 @@ camera.add(verticalLine);
 camera.add(horizontalLine);
 scene.add(camera);
 
-// Pointer arrow to show target (small cone)
-const arrowGeometry = new THREE.ConeGeometry(0.5, 2, 32);
-const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-const pointerArrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
-scene.add(pointerArrow);
-
-// RC Plane drones (more detailed shape)
+// RC Plane drones (increased base size)
 const drones = [];
 function createDrone() {
     const droneGroup = new THREE.Group();
 
+    // Increased base scale for all components
+    const baseScale = 2; // Doubled the size (adjustable)
+
     // Fuselage (longer and narrower)
-    const fuselageGeometry = new THREE.CylinderGeometry(0.4, 0.4, 8, 12);
+    const fuselageGeometry = new THREE.CylinderGeometry(0.4 * baseScale, 0.4 * baseScale, 8 * baseScale, 12);
     const droneMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const fuselage = new THREE.Mesh(fuselageGeometry, droneMaterial);
     fuselage.rotation.z = Math.PI / 2;
 
     // Wings (angled for a more realistic look)
-    const wingGeometry = new THREE.BoxGeometry(10, 0.2, 2);
+    const wingGeometry = new THREE.BoxGeometry(10 * baseScale, 0.2 * baseScale, 2 * baseScale);
     const wingMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const wing = new THREE.Mesh(wingGeometry, wingMaterial);
-    wing.position.y = 0.2;
+    wing.position.y = 0.2 * baseScale;
 
     // Tail (vertical stabilizer)
-    const tailGeometry = new THREE.BoxGeometry(0.2, 2, 1);
+    const tailGeometry = new THREE.BoxGeometry(0.2 * baseScale, 2 * baseScale, 1 * baseScale);
     const tail = new THREE.Mesh(tailGeometry, droneMaterial);
-    tail.position.x = -4;
-    tail.position.y = 1;
+    tail.position.x = -4 * baseScale;
+    tail.position.y = 1 * baseScale;
 
     // Horizontal stabilizer
-    const hStabGeometry = new THREE.BoxGeometry(3, 0.2, 1);
+    const hStabGeometry = new THREE.BoxGeometry(3 * baseScale, 0.2 * baseScale, 1 * baseScale);
     const hStab = new THREE.Mesh(hStabGeometry, droneMaterial);
-    hStab.position.x = -4;
+    hStab.position.x = -4 * baseScale;
 
     // Propeller (small cone at the front for visual effect)
-    const propGeometry = new THREE.ConeGeometry(0.3, 1, 8);
+    const propGeometry = new THREE.ConeGeometry(0.3 * baseScale, 1 * baseScale, 8);
     const prop = new THREE.Mesh(propGeometry, droneMaterial);
-    prop.position.x = 4;
+    prop.position.x = 4 * baseScale;
     prop.rotation.z = Math.PI;
 
     droneGroup.add(fuselage);
@@ -173,19 +181,22 @@ function createDrone() {
     droneGroup.add(tail);
     droneGroup.add(hStab);
     droneGroup.add(prop);
+
+    // Store initial scale for dynamic scaling
+    droneGroup.userData.initialScale = baseScale;
     return droneGroup;
 }
 
-// Spawn drones closer to the horizon
+// Spawn drones from higher altitude
 function spawnDrone() {
     if (drones.length >= maxDrones) return;
 
     const drone = createDrone();
     const radius = 100;
-    const theta = Math.random() * Math.PI * 2; // Random angle around the horizon
-    const height = -5 + Math.random() * 5; // Low height near the horizon (slightly above ground)
+    const theta = Math.random() * Math.PI * 2; // Random angle around the station
+    const height = 50 + Math.random() * 50; // Spawn between 50 and 100 units high
     const x = stationGroup.position.x + radius * Math.cos(theta);
-    const y = height; // Keep drones low
+    const y = height; // High altitude spawn
     const z = stationGroup.position.z + radius * Math.sin(theta);
     drone.position.set(x, y, z);
     drones.push(drone);
@@ -223,8 +234,15 @@ const tracers = [];
 const tracerGeometry = new THREE.CylinderGeometry(0.1, 0.1, 2, 32);
 const tracerMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00 });
 
-// Camera position (first-person view)
-camera.position.set(0, 2, 20);
+// Target lock ring (improved with pulsing effect)
+const lockRingGeometry = new THREE.RingGeometry(2, 2.2, 32); // Slightly larger for bigger drones
+const lockRingMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+const lockRing = new THREE.Mesh(lockRingGeometry, lockRingMaterial);
+scene.add(lockRing);
+
+// Camera position (closer to the domes for visibility)
+camera.position.set(50, 5, 10); // Moved closer to the domes (x:50 matches station, z:10 brings it nearer)
+camera.lookAt(new THREE.Vector3(50, 0, -50)); // Ensure camera faces the station initially
 
 // Mouse controls for aiming and shooting
 const mouse = new THREE.Vector2();
@@ -241,8 +259,8 @@ document.addEventListener('mousemove', (event) => {
     const sensitivity = 0.002;
     camera.rotation.y -= event.movementX * sensitivity;
     camera.rotation.x -= event.movementY * sensitivity;
-    camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -Math.PI / 4, Math.PI / 4); // Vertical limit
-    camera.rotation.y = THREE.MathUtils.clamp(camera.rotation.y, -Math.PI / 3, Math.PI / 3); // Horizontal limit
+    camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -Math.PI / 4, Math.PI / 4);
+    camera.rotation.y = THREE.MathUtils.clamp(camera.rotation.y, -Math.PI / 3, Math.PI / 3);
 });
 
 document.addEventListener('mousedown', async () => {
@@ -288,7 +306,8 @@ function updateUI() {
 function checkCollisions() {
     tracers.forEach((tracer, tIndex) => {
         drones.forEach((drone, dIndex) => {
-            const hitDistance = 3;
+            // Adjust hit distance for larger drones
+            const hitDistance = 6; // Increased due to larger drone size
             if (tracer.mesh.position.distanceTo(drone.position) < hitDistance) {
                 const explosion = createExplosion(drone.position.clone());
                 activeParticles.push(explosion);
@@ -305,8 +324,13 @@ function checkCollisions() {
 }
 
 // Animation loop
+let pulseTime = 0;
 function animate() {
     requestAnimationFrame(animate);
+
+    // Pulse effect for lock ring
+    pulseTime += 0.05;
+    lockRingMaterial.opacity = 0.5 + 0.3 * Math.sin(pulseTime);
 
     // Spawn drones based on frequency
     const now = performance.now();
@@ -338,32 +362,45 @@ function animate() {
         const direction = targetPos.clone().sub(drone.position).normalize();
         drone.position.add(direction.multiplyScalar(droneSpeed));
 
-        // Keep drones low while moving
-        if (drone.position.y > targetPos.y) {
-            drone.position.y -= 0.05; // Gradually descend if too high
+        // Gradually descend towards target height
+        if (drone.position.y > targetPos.y + 5) {
+            drone.position.y -= 0.1;
         }
 
         // Rotate drone to face target
         drone.lookAt(targetPos);
         drone.rotation.y += Math.PI / 2;
+
+        // Scale drone based on distance to station (larger as it gets closer)
+        const distanceToStation = drone.position.distanceTo(stationGroup.position);
+        const maxDistance = 100; // Starting distance (spawn radius)
+        const minScale = drone.userData.initialScale; // Starting scale
+        const maxScale = minScale * 2; // Maximum scale when very close
+        const scaleFactor = THREE.MathUtils.clamp(1 - (distanceToStation / maxDistance), 0, 1);
+        const newScale = THREE.MathUtils.lerp(minScale, maxScale, scaleFactor);
+        drone.scale.set(newScale, newScale, newScale);
     });
 
-    // Update pointer arrow to point at the nearest drone
+    // Update lock-on ring to nearest drone (improved targeting)
     let nearestDrone = null;
     let minDistance = Infinity;
     drones.forEach(drone => {
+        if (!drone) return; // Skip if drone is null/undefined
         const distance = camera.position.distanceTo(drone.position);
-        if (distance < minDistance) {
+        if (distance < minDistance && drone.visible) {
             minDistance = distance;
             nearestDrone = drone;
         }
     });
     if (nearestDrone) {
-        pointerArrow.position.copy(camera.position);
-        pointerArrow.position.z -= 3; // Position in front of camera
-        pointerArrow.lookAt(nearestDrone.position);
+        lockRing.position.copy(nearestDrone.position);
+        lockRing.lookAt(camera.position);
+        // Scale lock ring with drone size
+        const droneScale = nearestDrone.scale.x;
+        lockRing.scale.set(droneScale, droneScale, droneScale);
+        lockRing.visible = true;
     } else {
-        pointerArrow.position.set(0, -100, 0); // Hide off-screen if no drones
+        lockRing.visible = false;
     }
 
     // Update tracers

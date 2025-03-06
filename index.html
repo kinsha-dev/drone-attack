@@ -34,6 +34,13 @@
             padding: 10px;
             border-radius: 5px;
         }
+    #healthBar {
+            height: 100%;
+            width: 100%;
+            background-color: green;
+            border-radius: 3px;
+            transition: width 0.3s, background-color 0.3s;
+        } 
     </style>
 </head>
 <body>
@@ -49,6 +56,6 @@
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+    <script src="static/games.js"></script>
 </body>
 </html>
